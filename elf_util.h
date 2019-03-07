@@ -16,6 +16,7 @@ using std::endl;
 using std::string;
 using std::vector;
 using std::unique_ptr;
+using std::ostream;
 using std::ostringstream;
 using std::move;
 
@@ -35,41 +36,93 @@ unique_ptr<char[]> readFile(const char *filename)
 
 ////////////////////////////////////////////////////////////
 
-string progtype(int value){
-#define PROCESS_VAL(p) case(p): return #p;
-    switch(value){
-        PROCESS_VAL(PT_NULL);
-        PROCESS_VAL(PT_LOAD);
-        PROCESS_VAL(PT_DYNAMIC);
-        PROCESS_VAL(PT_INTERP);
-        PROCESS_VAL(PT_NOTE);
-        PROCESS_VAL(PT_SHLIB);
-        PROCESS_VAL(PT_PHDR);
-        PROCESS_VAL(PT_TLS);
-        PROCESS_VAL(PT_NUM);
-        PROCESS_VAL(PT_LOOS);
-        PROCESS_VAL(PT_GNU_EH_FRAME);
-        PROCESS_VAL(PT_GNU_STACK);
-        PROCESS_VAL(PT_GNU_RELRO);
-        //PROCESS_VAL(PT_LOSUNW);
-        PROCESS_VAL(PT_SUNWBSS);
-        PROCESS_VAL(PT_SUNWSTACK);
-        //PROCESS_VAL(PT_HISUNW);
-        PROCESS_VAL(PT_HIOS);
-        PROCESS_VAL(PT_LOPROC);
-        PROCESS_VAL(PT_HIPROC);
+class ProgType{
+public:
+    static const ProgType NULL_;
+    static const ProgType LOAD;
+    static const ProgType DYNAMIC;
+    static const ProgType INTERP;
+    static const ProgType NOTE;
+    static const ProgType SHLIB;
+    static const ProgType PHDR;
+    static const ProgType TLS;
+    static const ProgType NUM;
+    static const ProgType LOOS;
+    static const ProgType GNU_EH_FRAME;
+    static const ProgType GNU_STACK;
+    static const ProgType GNU_RELRO;
+    //static const ProgType LOSUNW;
+    static const ProgType SUNWBSS;
+    static const ProgType SUNWSTACK;
+    //static const ProgType HISUNW;
+    static const ProgType HIOS;
+    static const ProgType LOPROC;
+    static const ProgType HIPROC;
+
+    static ProgType of(int value){
+        switch(value){
+        case PT_NULL: return NULL_;
+        case PT_LOAD: return LOAD;
+        case PT_DYNAMIC: return DYNAMIC;
+        case PT_INTERP: return INTERP;
+        case PT_NOTE: return NOTE;
+        case PT_SHLIB: return SHLIB;
+        case PT_PHDR: return PHDR;
+        case PT_TLS: return TLS;
+        case PT_NUM: return NUM;
+        case PT_LOOS: return LOOS;
+        case PT_GNU_EH_FRAME: return GNU_EH_FRAME;
+        case PT_GNU_STACK: return GNU_STACK;
+        case PT_GNU_RELRO: return GNU_RELRO;
+        case PT_SUNWBSS: return SUNWBSS;
+        case PT_SUNWSTACK: return SUNWSTACK;
+        case PT_HIOS: return HIOS;
+        case PT_LOPROC: return LOPROC;
+        case PT_HIPROC: return HIPROC;
         default:
-            ostringstream sout;
-            sout << "PT_INVALID_" << value;
-            return sout.str();
+            return ProgType("Invalid", value);
+        }
     }
-#undef PROCESS_VAL
+private:
+    ProgType(const string &name, int value):
+        name_(name), value_(value)
+    {}
+    const string name_;
+    const int value_;
+
+public:
+    const string &name() const { return name_;}
+    int value() const { return value_;}
+};
+
+const ProgType ProgType::NULL_{"NULL_", PT_NULL};
+const ProgType ProgType::LOAD{"LOAD", PT_LOAD};
+const ProgType ProgType::DYNAMIC{"DYNAMIC", PT_DYNAMIC};
+const ProgType ProgType::INTERP{"INTERP", PT_INTERP};
+const ProgType ProgType::NOTE{"NOTE", PT_NOTE};
+const ProgType ProgType::SHLIB{"SHLIB", PT_SHLIB};
+const ProgType ProgType::PHDR{"PHDR", PT_PHDR};
+const ProgType ProgType::TLS{"TLS", PT_TLS};
+const ProgType ProgType::NUM{"NUM", PT_NUM};
+const ProgType ProgType::LOOS{"LOOS", PT_LOOS};
+const ProgType ProgType::GNU_EH_FRAME{"GNU_EH_FRAME", PT_GNU_EH_FRAME};
+const ProgType ProgType::GNU_STACK{"GNU_STACK", PT_GNU_STACK};
+const ProgType ProgType::GNU_RELRO{"GNU_RELRO", PT_GNU_RELRO};
+const ProgType ProgType::SUNWBSS{"SUNWBSS", PT_SUNWBSS};
+const ProgType ProgType::SUNWSTACK{"SUNWSTACK", PT_SUNWSTACK};
+const ProgType ProgType::HIOS{"HIOS", PT_HIOS};
+const ProgType ProgType::LOPROC{"LOPROC", PT_LOPROC};
+const ProgType ProgType::HIPROC{"HIPROC", PT_HIPROC};
+
+ostream& operator<<(ostream &os, const ProgType& type)
+{
+    return os << type.name() << "(0x" << std::hex << type.value() << ")";
 }
 
 
 class Phdr{
 public:
-    virtual int p_type() const = 0;
+    virtual ProgType p_type() const = 0;
 };
 
 class Phdr32: public Phdr{
@@ -78,7 +131,7 @@ public:
         :phdr_(phdr)
     { }
 
-    virtual int p_type() const { return phdr_.p_type;}
+    virtual ProgType p_type() const { return ProgType::of(phdr_.p_type);}
 private:
     Elf32_Phdr phdr_;
 };
@@ -89,37 +142,73 @@ public:
         :phdr_(phdr)
     { }
 
-    virtual int p_type() const { return phdr_.p_type;}
+    virtual ProgType p_type() const { return ProgType::of(phdr_.p_type);}
 private:
     Elf64_Phdr phdr_;
 };
 
 ////////////////////////////////////////////////////////////
 
-string elftype(int value){
-#define PROCESS_VAL(p) case(p): return #p;
-    switch(value){
-        PROCESS_VAL(ET_NONE);
-        PROCESS_VAL(ET_REL);
-        PROCESS_VAL(ET_EXEC);
-        PROCESS_VAL(ET_DYN);
-        PROCESS_VAL(ET_CORE);
-        PROCESS_VAL(ET_NUM);
-        PROCESS_VAL(ET_LOOS);
-        PROCESS_VAL(ET_HIOS);
-        PROCESS_VAL(ET_LOPROC);
-        PROCESS_VAL(ET_HIPROC);
+class ElfType{
+public:
+    static const ElfType NONE;
+    static const ElfType REL;
+    static const ElfType EXEC;
+    static const ElfType DYN;
+    static const ElfType CORE;
+    static const ElfType NUM;
+    static const ElfType LOOS;
+    static const ElfType HIOS;
+    static const ElfType LOPROC;
+    static const ElfType HIPROC;
+
+    static ElfType of(int value){
+        switch(value){
+        case ET_NONE: return NONE;
+        case ET_REL: return REL;
+        case ET_EXEC: return EXEC;
+        case ET_DYN: return DYN;
+        case ET_CORE: return CORE;
+        case ET_NUM: return NUM;
+        case ET_LOOS: return LOOS;
+        case ET_HIOS: return HIOS;
+        case ET_LOPROC: return LOPROC;
+        case ET_HIPROC: return HIPROC;
         default:
-            ostringstream sout;
-            sout << "ET_INVALID_" << value;
-            return sout.str();
+            return ElfType("Invalid", value);
+        }
     }
-#undef PROCESS_VAL
+private:
+    ElfType(const string &name, int value):
+        name_(name), value_(value)
+    {}
+    const string name_;
+    const int value_;
+
+public:
+    const string &name() const { return name_;}
+    int value() const { return value_;}
+};
+
+const ElfType ElfType::NONE{"None", ET_NONE};
+const ElfType ElfType::REL{"Rel", ET_REL};
+const ElfType ElfType::EXEC{"Exec", ET_EXEC};
+const ElfType ElfType::DYN{"Dyn", ET_DYN};
+const ElfType ElfType::CORE{"Core", ET_CORE};
+const ElfType ElfType::NUM{"Num", ET_NUM};
+const ElfType ElfType::LOOS{"LoOS", ET_LOOS};
+const ElfType ElfType::HIOS{"HiOS", ET_HIOS};
+const ElfType ElfType::LOPROC{"LoProc", ET_LOPROC};
+const ElfType ElfType::HIPROC{"HiProc", ET_HIPROC};
+
+ostream& operator<<(ostream &os, const ElfType& type)
+{
+    return os << type.name() << "(0x" << std::hex << type.value() << ")";
 }
 
 class Ehdr{
 public:
-    virtual int e_type() const = 0;
+    virtual ElfType e_type() const = 0;
     virtual uint64_t e_phoff() const = 0;
     virtual uint16_t e_phentsize() const = 0;
     virtual uint16_t e_phnum() const = 0;
@@ -133,7 +222,7 @@ public:
     {
     }
 
-    virtual int e_type() const { return hdr_.e_type;}
+    virtual ElfType e_type() const { return ElfType::of(hdr_.e_type);}
     virtual uint64_t e_phoff() const { return hdr_.e_phoff;}
     virtual uint16_t e_phentsize() const { return hdr_.e_phentsize;}
     virtual uint16_t e_phnum() const { return hdr_.e_phnum;}
@@ -148,7 +237,7 @@ public:
     {
     }
 
-    virtual int e_type() const { return hdr_.e_type;}
+    virtual ElfType e_type() const { return ElfType::of(hdr_.e_type);}
     virtual uint64_t e_phoff() const { return hdr_.e_phoff;}
     virtual uint16_t e_phentsize() const { return hdr_.e_phentsize;}
     virtual uint16_t e_phnum() const { return hdr_.e_phnum;}
@@ -171,14 +260,16 @@ public:
 
         ehdr_ = unique_ptr<Ehdr>(toEhdr(buffer.get()));
 
-        for(uint16_t i = 0; i < e_phnum(); ++i)
-            phdrs_.emplace_back(toPhdr(buffer.get() + e_phoff() + i * e_phentsize()));
+        for(uint16_t i = 0; i < e_phnum(); ++i){
+            const char *buf = buffer.get() + e_phoff() + i * e_phentsize();
+            phdrs_.emplace_back(toPhdr(buf));
+        }
 
         for(size_t i = 0; i < phdrs_.size(); ++i)
-            cout << "#" << i << ": prog type: " << progtype(phdrs_[i]->p_type()) << endl;
+            cout << "#" << i << ": prog type: " << phdrs_[i]->p_type() << endl;
     }
 
-    int e_type() const { return ehdr_->e_type();}
+    ElfType e_type() const { return ehdr_->e_type();}
     uint64_t e_phoff() const { return ehdr_->e_phoff();}
     uint16_t e_phentsize() const { return ehdr_->e_phentsize();}
     uint16_t e_phnum() const { return ehdr_->e_phnum();}
@@ -199,4 +290,4 @@ private:
     vector<unique_ptr<Phdr>> phdrs_;
 };
 
-}; //namespace end
+} //namespace end

@@ -7,7 +7,6 @@ using std::cout;
 using std::cerr;
 using std::endl;
 using std::string;
-using std::unique_ptr;
 using namespace elf;
 
 void printUsage()
@@ -24,6 +23,6 @@ int main(int argc, char* argv[])
 
     const char* filename = argv[1];
     ELF elf(filename);
-    cout << "ELF Type: " << elftype(elf.e_type()) << endl;
+    cout << "ELF Type: " << elf.e_type() << endl;
     return 0;
 }
