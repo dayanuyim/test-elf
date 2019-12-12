@@ -90,15 +90,24 @@ int main(int argc, char* argv[])
 
         for(size_t i = 0; i < elf.e_shnum(); ++i){
             const auto &shdr = elf.shdr(i);
-            cout << Addr(offset) << " Shdr[" << i << "] " << shdr->sh_type() << endl;
+            const string &shname = elf.get_sh_name(i);
+            const auto &shtype = shdr->sh_type();
+
+            cout << Addr(offset) << " Shdr[" << i << "] " << shtype << " " << shname << endl;
             offset += elf.e_shentsize();
+
+            if(shname.compare(".GCC.command.line") == 0){
+                vector<string> sec = elf.dump_section_strs(i);
+                for(auto it = sec.cbegin(); it < sec.cend(); ++it)
+                    cout << "  " << *it << endl;
+            }
         }
     }
 
     //EOF ============================
-    if(offset != elf.size())
+    if(offset != elf.filesize())
         cout << Addr(offset) << " ------------" << endl;
-    cout << Addr(elf.size()) << " ---EOF----" << endl;
+    cout << Addr(elf.filesize()) << " ---EOF----" << endl;
 
     return 0;
 }

@@ -3,7 +3,7 @@ CFLAGS = -std=c++17 -Wall -Wextra -pedantic -g
 INCS = -I.
 LIBS = -L.
 
-OBJS = elfparser.o
+OBJS = elf_util.o elfparser.o
 HDRS = elf_util.h
 
 EXE = elfparser
