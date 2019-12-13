@@ -1,34 +1,109 @@
 #include <iostream>
-#include <iomanip>
+#include <sstream>
 #include <stdexcept>
 #include <string>
-#include "elf_util.h"
+#include <map>
+#include "elf_bin.h"
 
 using std::cout;
 using std::cerr;
 using std::endl;
-using std::hex;
-using std::dec;
 using std::string;
-using std::setfill;
-using std::setw;
-using namespace elf;
-
-struct Addr{
-    Addr(int value = 0){ this->value = value;}
-    int value;
-};
-
-ostream& operator<<(ostream &os, const Addr &addr)
-{
-    OstreamFlagRecover recover(os);
-    return os << "0x" << setfill('0') << setw(8) << hex << addr.value;
-}
+using std::map;
+using std::ostringstream;
+using namespace iii;
 
 
 void printUsage()
 {
     cerr << "usage: elfparser <elf-file>" << endl;
+}
+
+string str(ostringstream &sout)
+{
+    string s = sout.str();
+    sout.str("");
+    sout.clear();
+    return s;
+}
+
+map<uint64_t,string> makeLayout(const ELF &elf)
+{
+    ostringstream sout;
+    map<uint64_t,string> addrmap;
+
+    // Elf header ====
+    uint64_t offset = 0;
+    addrmap[offset] = "----EHdr-----"; 
+
+    offset = elf.e_size();
+    addrmap[offset] = "-------------";
+
+    // Program Header
+    if(elf.e_phnum() > 0){
+        offset = elf.e_phoff();
+        addrmap[offset] = "----Phdr-----"; 
+
+        for(size_t i = 0; i < elf.e_phnum(); ++i){
+            const auto &phdr = elf.phdr(i);
+            sout << "Phdr[" << i << "] " << phdr->p_type()
+                 << " " << Addr(phdr->p_offset())
+                 << "~" << Addr(phdr->p_offset() + phdr->p_filesz());
+            addrmap[offset] = str(sout);
+            offset += elf.e_phentsize();
+        }
+
+        addrmap[offset] = "-------------";
+    }
+
+    // Sections ======================================
+    if(elf.e_shnum() > 0){
+        offset = elf.shdr(0)->sh_offset();
+        addrmap[offset] = "---- Sections -----"; 
+
+        for(size_t i = 0; i < elf.e_shnum(); ++i){
+            const auto &shdr = elf.shdr(i);
+
+            offset = shdr->sh_offset();
+            sout << "Section[" << i << "] " << shdr->sh_type();
+            addrmap[offset] = str(sout);
+
+            offset += shdr->sh_size();
+            addrmap[offset] ="-------------";
+        }
+    }
+
+    // Section Header ===================
+    if(elf.e_shnum() > 0){
+        offset = elf.e_shoff();
+        addrmap[offset] ="----Shdr-----"; 
+
+        for(size_t i = 0; i < elf.e_shnum(); ++i){
+            const auto &shdr = elf.shdr(i);
+            const string &shname = elf.get_sh_name(i);
+            const auto &shtype = shdr->sh_type();
+
+            sout << "Shdr[" << i << "] " << shtype << " " << shname;
+            addrmap[offset] = str(sout);
+
+            offset += elf.e_shentsize();
+            addrmap[offset] = "-------------";
+        }
+    }
+
+    addrmap[elf.filesize()] =  "----EOF----";
+    return addrmap;
+}
+
+vector<string> findGccCmdArgs(const ELF &elf)
+{
+    for(size_t i = 0; i < elf.e_shnum(); ++i){
+        const string &shname = elf.get_sh_name(i);
+        if(shname.compare(".GCC.command.line") == 0)
+            return elf.dump_section_strs(i);
+    }
+
+    return vector<string>{};
 }
 
 int main(int argc, char* argv[])
@@ -40,74 +115,20 @@ int main(int argc, char* argv[])
 
     const char* filename = argv[1];
     ELF elf(filename);
-
     cout << "ELF Type: " << elf.e_type() << endl;
 
-    // Elf header ====
-    uint64_t offset = 0;
-    cout << Addr(offset) << " ---EHdr-----" << endl;
-    offset = elf.e_size();
+    map<uint64_t, string> layout = makeLayout(elf);
+    for(auto it = layout.cbegin(); it != layout.cend(); ++it)
+        cout << Addr(it->first) << " " << it->second << endl;
 
-    // Program Header
-    if(elf.e_phnum() > 0){
-        if(offset != elf.e_phoff())
-            cout << Addr(offset) << " ------------" << endl;
-        offset = elf.e_phoff();
-        cout << Addr(offset) << " ---Phdr-----" << endl; 
-
-        for(size_t i = 0; i < elf.e_phnum(); ++i){
-            const auto &phdr = elf.phdr(i);
-            cout << Addr(offset) << " Phdr[" << i << "] " << phdr->p_type()
-                 << " 0x" << Addr(phdr->p_offset())
-                 << "~0x" << Addr(phdr->p_offset() + phdr->p_filesz()) << endl;
-            offset += elf.e_phentsize();
-        }
+    vector<string> args = findGccCmdArgs(elf);
+    if(args.empty())
+        cout << "Gcc Args: N/A" << endl;
+    else{
+        cout << "Gcc Args:" << endl;
+        for(auto it = args.cbegin(); it != args.cend(); ++it)
+            cout << "  " << *it << endl;
     }
-
-    // Sections ======================================
-    if(elf.e_shnum() > 0){
-        if(offset != elf.shdr(0)->sh_offset())
-            cout << Addr(offset) << " ------------" << endl;
-        offset = elf.shdr(0)->sh_offset();
-        cout << Addr(offset) << " --- Sections -----" << endl; 
-
-        for(size_t i = 0; i < elf.e_shnum(); ++i){
-            const auto &shdr = elf.shdr(i);
-            if(offset != shdr->sh_offset())
-                cout << Addr(offset) << " ------------" << endl;
-            offset = shdr->sh_offset();
-            cout << Addr(offset) << " Section[" << i << "] " << shdr->sh_type() << endl;
-            offset += shdr->sh_size();
-        }
-    }
-
-    // Section Header ===================
-    if(elf.e_shnum() > 0){
-        if(offset != elf.e_shoff())
-            cout << Addr(offset) << " ------------" << endl;
-        offset = elf.e_shoff();
-        cout << Addr(offset) << " ---Shdr-----" << endl; 
-
-        for(size_t i = 0; i < elf.e_shnum(); ++i){
-            const auto &shdr = elf.shdr(i);
-            const string &shname = elf.get_sh_name(i);
-            const auto &shtype = shdr->sh_type();
-
-            cout << Addr(offset) << " Shdr[" << i << "] " << shtype << " " << shname << endl;
-            offset += elf.e_shentsize();
-
-            if(shname.compare(".GCC.command.line") == 0){
-                vector<string> sec = elf.dump_section_strs(i);
-                for(auto it = sec.cbegin(); it < sec.cend(); ++it)
-                    cout << "  " << *it << endl;
-            }
-        }
-    }
-
-    //EOF ============================
-    if(offset != elf.filesize())
-        cout << Addr(offset) << " ------------" << endl;
-    cout << Addr(elf.filesize()) << " ---EOF----" << endl;
 
     return 0;
 }

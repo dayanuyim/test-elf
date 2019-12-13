@@ -1,17 +1,16 @@
-#ifndef __ELF_UTIL_H
-#define __ELF_UTIL_H
+#ifndef __ELF_BIN_H
+#define __ELF_BIN_H 1
 
 #include <iostream>
-#include <fstream>
 #include <sstream>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
-#include <elf.h>
 #include <vector>
+#include <elf.h>
 
-namespace elf{
+namespace iii{
 
 using std::cout;
 using std::cerr;
@@ -24,20 +23,14 @@ using std::ostringstream;
 using std::move;
 using std::array;
 
-class OstreamFlagRecover{
-public:
-    OstreamFlagRecover(ostream &os)
-        :os_(os), flags_(os.flags()){}
+////////////////////////////////////////////////////////////
 
-    ~OstreamFlagRecover(){
-        os_.flags(flags_);
-    }
-private:
-    ostream &os_;
-    std::ios_base::fmtflags flags_;
+struct Addr{
+    Addr(int value = 0){ this->value = value;}
+    int value;
 };
+ostream& operator<<(ostream &os, const Addr &addr);
 
-string readFile(const char *filename);
 
 ////////////////////////////////////////////////////////////
 
@@ -332,24 +325,7 @@ private:
 //////////////////////////////////////////////////////////
 class ELF{
 public:
-    ELF(const char *filename)
-    {
-        bin_ = readFile(filename);
-        if(filesize() < EI_NIDENT)
-            throw std::invalid_argument("invalid elf header len");
-
-        ehdr_ = unique_ptr<Ehdr>(toEhdr(bin_.c_str()));
-
-        for(uint16_t i = 0; i < e_phnum(); ++i){
-            uint64_t offset = e_phoff() + i * e_phentsize();
-            phdrs_.emplace_back(toPhdr(bin_.c_str() + offset));
-        }
-
-        for(uint16_t i = 0; i < e_shnum(); ++i){
-            uint64_t offset = e_shoff() + i * e_shentsize();
-            shdrs_.emplace_back(toShdr(bin_.c_str() + offset));
-        }
-    }
+    ELF(const char *filename);
 
     size_t filesize() const { return bin_.length(); }
     size_t e_size()        const { return ehdr_->e_size(); }

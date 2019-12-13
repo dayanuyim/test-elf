@@ -1,25 +1,30 @@
-#include "elf_util.h"
 #include <vector>
 #include <string>
+#include <utility>
+#include <stdexcept>
+#include <iomanip>
+#include "utils.h"
+#include "elf_bin.h"
+
+namespace iii{
 
 using std::string;
 using std::vector;
+using std::unique_ptr;
+using std::hex;
+using std::dec;
+using std::setfill;
+using std::setw;
+using iii::OstreamFlagRecover;
+using iii::readFile;
 
-namespace elf{
-
-string readFile(const char *filename)
+ostream& operator<<(ostream &os, const Addr &addr)
 {
-    std::ifstream infile(filename);
-
-    //get length of file
-    infile.seekg(0, infile.end);
-    size_t length = infile.tellg();
-    infile.seekg(0, infile.beg);
-    
-    unique_ptr<char[]>buffer(new char[length]);
-    infile.read(buffer.get(), length);
-    return string(buffer.get(), length);
+    OstreamFlagRecover recover(os);
+    return os << "0x" << setfill('0') << setw(8) << hex << addr.value;
 }
+
+//////////////////////////////////////////////////////////////////////
 
 ProgType ProgType::of(uint32_t value){
     switch(value){
@@ -67,7 +72,7 @@ const ProgType ProgType::HIPROC{"HIPROC", PT_HIPROC};
 
 ostream& operator<<(ostream &os, const ProgType& type)
 {
-    OstreamFlagRecover recover(cout);
+    OstreamFlagRecover recover(os);
     return os << type.name() << "(0x" << std::hex << type.value() << ")";
 }
 
@@ -149,7 +154,7 @@ const SecType SecType::HIUSER{"HIUSER", SHT_HIUSER};
 
 ostream& operator<<(ostream &os, const SecType& type)
 {
-    OstreamFlagRecover recover(cout);
+    OstreamFlagRecover recover(os);
     return os << type.name() << "(0x" << std::hex << type.value() << ")";
 }
 ////////////////////////////////////////////////////////////
@@ -183,31 +188,56 @@ const ElfType ElfType::HIPROC{"HiProc", ET_HIPROC};
 
 ostream& operator<<(ostream &os, const ElfType& type)
 {
-    OstreamFlagRecover recover(cout);
+    OstreamFlagRecover recover(os);
     return os << type.name() << "(0x" << std::hex << type.value() << ")";
 }
 
 ////////////////////////////////////////////////////////////
 
-vector<string> ELF::dump_section_strs(size_t i) const {
-
+vector<string> splits_bin(const void *addr, size_t sz, char sp)
+{
     vector<string> strs;
 
-    const auto &shdr = shdrs_[i];
-    const char *sec = bin_.c_str() + shdr->sh_offset();
-    const char *sec_end = sec + shdr->sh_size();
-
-    while(sec < sec_end){
-        const char *cp;
-        for(cp = sec; cp < sec_end; ++cp){
-            if(*cp == 0)
+    const char* mem = (const char*) addr;
+    const char* mem_end = (char*)mem + sz;
+    while(mem < mem_end){
+        const char* cp;
+        for(cp = mem; cp < mem_end; ++cp){
+            if(*cp == sp)
                 break;
         }
-        strs.emplace_back(sec, cp-sec);
-        sec = cp + 1;
+        strs.emplace_back(mem, cp-mem);
+        mem = cp + 1;
+    }
+    return strs;
+}
+
+vector<string> ELF::dump_section_strs(size_t i) const
+{
+    const auto &shdr = shdrs_[i];
+    const char *sec = bin_.c_str() + shdr->sh_offset();
+    uint64_t sz = shdr->sh_size();
+
+    return splits_bin(sec, sz, '\0');
+}
+
+ELF::ELF(const char *filename)
+{
+    bin_ = iii::readFile(filename);
+    if(filesize() < EI_NIDENT)
+        throw std::invalid_argument("invalid elf header len");
+
+    ehdr_ = unique_ptr<Ehdr>(toEhdr(bin_.c_str()));
+
+    for(uint16_t i = 0; i < e_phnum(); ++i){
+        uint64_t offset = e_phoff() + i * e_phentsize();
+        phdrs_.emplace_back(toPhdr(bin_.c_str() + offset));
     }
 
-    return strs;
+    for(uint16_t i = 0; i < e_shnum(); ++i){
+        uint64_t offset = e_shoff() + i * e_shentsize();
+        shdrs_.emplace_back(toShdr(bin_.c_str() + offset));
+    }
 }
 
 } //namespace end
